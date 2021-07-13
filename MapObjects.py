@@ -1,14 +1,10 @@
 from math import atan2, pi, floor, sin, cos, ceil
 from typing import List, Tuple
-import bezier
 
+import bezier
 import numpy as np
-from matplotlib import pyplot as plt
-from pygame import Surface, SRCALPHA, transform
-from pygame.image import load, save
 from pygame.mixer import Sound
 from pygame.time import get_ticks
-from pygame.transform import flip
 
 import Enums
 import colour
@@ -127,6 +123,8 @@ class HitCircle:
         self.stopStep = False
         self.scored = False
 
+        self.reached = False
+
     def clickedFinder(self, time, keyboardHandler):
         if self.clicked or self.kill:
             return
@@ -150,17 +148,21 @@ class HitCircle:
             #print("SCORED", self.score)
 
     def step(self, time):
-        if self.fadeInStart <= time <= self.fadeInEnd:
+        if self.fadeInStart <= time <= self.fadeInEnd or (time > self.fadeInEnd and self.hitCircle.tweenTransparencyStage < 1 and not self.reached):
             timeChange = time - self.fadeInStart
+            stage = min(timeChange / (self.fadeInEnd - self.fadeInStart), 1)
 
-            self.hitCircle.tweenTransparencyStage = timeChange / (self.fadeInEnd - self.fadeInStart)
+            if stage == 1:
+                self.reached = True
+
+            self.hitCircle.tweenTransparencyStage = stage
 
             self.hitCircle.updateTweenTransparency(0, fullBypass=True)
 
-            self.comboCircle.tweenTransparencyStage = timeChange / (self.fadeInEnd - self.fadeInStart)
+            self.comboCircle.tweenTransparencyStage = stage
             self.comboCircle.updateTweenTransparency(0, fullBypass=True)
 
-            self.approachCircle.tweenTransparencyStage = timeChange / (self.fadeInEnd - self.fadeInStart)
+            self.approachCircle.tweenTransparencyStage = stage
             self.approachCircle.updateTweenTransparency(0, fullBypass=True)
 
         if self.fadeInStart <= time <= self.time:
@@ -234,6 +236,7 @@ class Sliders:
                  approachRateTimings: tuple,
                  whiteImageTexture,
                  sliderFollowTexture,
+                 sliderBoarderTexture,
                  comboColourTuple: Tuple[int, int, int],
                  pixelExtraData: Tuple[vector.Vector2, vector.Vector2, vector.Vector2, vector.Vector2],
 
@@ -270,7 +273,7 @@ class Sliders:
             numberCircleTexture,
             hitWindowData,
             displayV,
-            sliderMode=True
+            #sliderMode=True
         )
 
         self.curveQuad = None
@@ -384,6 +387,12 @@ class Sliders:
 
         elif curveType.value == "L":
             magnitudes = [(curvePoints[i] - curvePoints[i+1]).magnitude for i in range(len(curvePoints)-1)]
+
+            for i, mag in enumerate(magnitudes[:]):
+                if mag == 0:
+                    del magnitudes[i]
+                    del curvePoints[i]
+
             totalMagnitude = sum(magnitudes)
             ratioMagnitude = [mag/totalMagnitude for mag in magnitudes]
             stepSplit = [ratio*totalStep for ratio in ratioMagnitude]
@@ -397,14 +406,14 @@ class Sliders:
 
                 subVec = pointB - point
 
-                for stepI in range(floor(step)+1):
+                for stepI in range(ceil(step)+1):
                     distDiv = stepI/step
                     newVec = point + (subVec * distDiv)
 
                     self.curveDrawPoints.append(newVec - initialPoint)
 
-                for stepIntricateI in range(floor(stepIntricate)+1):
-                    distDiv = stepIntricate/step
+                for stepIntricateI in range(ceil(stepIntricate)+1):
+                    distDiv = stepIntricateI/stepIntricate
                     newVec = point + (subVec * distDiv)
 
                     self.curvePathIntricate.append(newVec - initialPoint)
@@ -417,6 +426,8 @@ class Sliders:
 
         if len(self.curvePathIntricate) and self.curvePathIntricate[-1].magnitude < self.curvePathIntricate[0].magnitude:
             self.curvePathIntricate = self.curvePathIntricate[::-1]
+
+        #print(time, len(self.curvePathIntricate), self.curvePathIntricate)
 
         self.drawPoints = []
         self.kill = False
@@ -436,8 +447,27 @@ class Sliders:
 
             newQuad = quadHandler.QuadWithTransparency(
                 extra.generateCircleCorners(
-                    self.OPToScreen(newPoint)/displayV,
+                    self.OPToScreen(newPoint) / displayV,
                     self.circleSize / displayV
+                ),
+                colour.Colour(102, 100, 99, convertToDecimal=True),
+                sliderBoarderTexture,
+                displayV
+            )
+
+            newQuad.tweenTransparencyInfo = (0, 1)
+            newQuad.tweenTransparencyInfoChange = 1
+            newQuad.tweenTransparencyDirection = 1
+
+            self.drawPoints.append(newQuad)
+
+        for point in self.curveDrawPoints:
+            newPoint = point + initialPoint
+
+            newQuad = quadHandler.QuadWithTransparency(
+                extra.generateCircleCorners(
+                    self.OPToScreen(newPoint)/displayV,
+                    self.circleSize*0.8 / displayV
                 ),
                 colour.Colour(50, 50, 50, convertToDecimal=True),
                 whiteImageTexture,
@@ -467,7 +497,7 @@ class Sliders:
             self.drawSlider = False
             self.kill = True
 
-        if self.startTime <= time <= endTime:
+        if self.startTime < time <= endTime:
             currentPositionIndex = floor((1-timeLeft/extraTime) * len(self.curvePathIntricate))
             currentPosition = self.curvePathIntricate[currentPositionIndex] + self.initialPoint
 
@@ -479,9 +509,10 @@ class Sliders:
                 colour.Colour(1, 1, 1),
             )
 
-        for quad in self.drawPoints:
-            quad.tweenTransparencyStage = self.startHitCircle.hitCircle.tweenTransparencyStage
-            quad.updateTweenTransparency(0, fullBypass=True)
+        if not self.startHitCircle.reached:
+            for quad in self.drawPoints:
+                quad.tweenTransparencyStage = self.startHitCircle.hitCircle.tweenTransparencyStage
+                quad.updateTweenTransparency(0, fullBypass=True)
 
     def draw(self, time, keyboardHandler, beatLength, sliderMultiplier):
         if self.kill:

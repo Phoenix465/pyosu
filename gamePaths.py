@@ -20,6 +20,7 @@ class PathHolder:
         self.emptyPath = path.join(self.resources, "empty.png")
         self.blackBlockPath = path.join(self.resources, "black.png")
         self.whiteBlockPath = path.join(self.resources, "white.png")
+        self.sliderBoarderPath = path.join(self.resources, "sliderboarder.png")
         self.whitecirclePath = path.join(self.resources, "whitecircle.png")
         self.CyberbitFont = path.join(self.resources, "Cyberbit.ttf")
         self.allerPath = path.join(self.resources, "Aller")

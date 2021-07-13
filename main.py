@@ -1,35 +1,19 @@
-import os
-import os.path as path
-from math import sqrt, floor
-from random import choice
+from math import floor
 from time import time
-from warnings import warn
 
-import numpy as np
 import pygame
 from OpenGL.GL import *
-from pygame import GL_MULTISAMPLEBUFFERS, GL_MULTISAMPLESAMPLES, mixer
+from pygame import GL_MULTISAMPLEBUFFERS, GL_MULTISAMPLESAMPLES
 from pygame.locals import DOUBLEBUF, OPENGL
-from pygame.mixer import music
 
-import Enums
-import colour
-import extra
-import quadHandler
-import texture
-import volumeOverlayHandler
+import cursor
+import gamePaths
+import mouseHandler
 from KeyPressHolder import KeyboardHandler
 from numberShower import NumberShower
 from scenes import SceneHolder
 from vector import Vector2
-import PygameWindowInfo
-import pyautogui
-from pygame.image import load
-import songs
 from volumeOverlayHandler import VolumeOverlay
-import gamePaths
-import mouseHandler
-import cursor
 
 
 def main():

@@ -1,27 +1,25 @@
 import configparser
+from os import path
 
 import numpy as np
+from pygame.image import load
+from pygame.mixer import music
+from pygame.time import get_ticks
 
 import Enums
 import MapObjects
 import colour
 import extra
 import gamePaths
+import osureader.reader
 import quadHandler
 import songs
 import texture
 import volumeOverlayHandler
-from os import path
-from pygame.image import load
-import osureader.reader
 from numberShower import NumberShower
 from osureader.beatmap import Beatmap
 from osureader.objects import HitObjectType, SliderCircle, HitCircle
-
 from vector import Vector2
-from pygame.mixer import music, Sound
-from pygame.time import get_ticks
-
 
 BeatmapParser = osureader.reader.BeatmapParser()
 
@@ -388,10 +386,19 @@ class SceneHolder:
             self.approachCircleTexture = texture.loadTexture(GamePaths.approachcirclePath)
             self.sliderFollowCircleTexture = texture.loadTexture(GamePaths.sliderBPath)
             self.whiteImageTexture = texture.loadTexture(GamePaths.whitecirclePath, useNearest=True)
-            
+            self.sliderBoarderTexture = texture.loadTexture(GamePaths.sliderBoarderPath, useNearest=True)
+
             self.HitCircleObjects = []
             self.TimingPointObjects = self.beatmap.timing_objects
             self.CheckTimingPoints = self.TimingPointObjects[:]
+
+            firstTimingPoint = self.CheckTimingPoints[0]
+            self.beatLength = firstTimingPoint.beat_length
+            self.meter = firstTimingPoint.meter
+            self.volume = firstTimingPoint.volume
+            self.sliderVelocity = 1
+            self.sliderMultiplier = self.beatmap.difficult_settings.slider_multiplier
+
 
             self.ApproachRate = self.beatmap.difficult_settings.approach_rate
             self.ApproachRatePreEmpt = 0
@@ -483,12 +490,6 @@ class SceneHolder:
 
             self.accuracyValue = "100.00"
 
-            self.beatLength = 0
-            self.meter = 0
-            self.volume = 0
-            self.sliderVelocity = 1
-            self.sliderMultiplier = self.beatmap.difficult_settings.slider_multiplier
-
             currentCombo = 0
 
             for hitObject in self.beatmap.hit_objects:
@@ -536,6 +537,7 @@ class SceneHolder:
                         self.ApproachRateTimings,
                         self.whiteImageTexture,
                         self.sliderFollowCircleTexture,
+                        self.sliderBoarderTexture,
                         self.comboData[0],
                         (self.osupixelAdjust2, self.osupixelRatio2, self.osupixel, self.osupixelRatio),
 
@@ -642,16 +644,19 @@ class SceneHolder:
             if not self.playedMusic:
                 return
 
-            timingPoint = self.CheckTimingPoints[0]
-            if timingPoint.time > time:
-                if timingPoint.uninherited:
-                    self.beatLength = timingPoint.beat_length
-                    self.volume = timingPoint.volume
-                    self.meter = timingPoint.meter
-                    self.sliderVelocity = self.sliderMultiplier
-                else:
-                    self.sliderVelocity = -100/timingPoint.beat_length * self.sliderMultiplier
+            if len(self.CheckTimingPoints):
+                timingPoint = self.CheckTimingPoints[0]
+                if timingPoint.time <= time:
+                    if timingPoint.uninherited:
+                        self.beatLength = timingPoint.beat_length
+                        self.volume = timingPoint.volume
+                        self.meter = timingPoint.meter
+                        self.sliderVelocity = self.sliderMultiplier
+                    else:
+                        # Inverse Relationship
+                        self.sliderVelocity = -100/timingPoint.beat_length * self.sliderMultiplier
 
+                    del self.CheckTimingPoints[0]
 
             checkHitList = []
 
@@ -666,7 +671,7 @@ class SceneHolder:
                 if isinstance(previousCircle, MapObjects.Sliders):
                     previousCircle = previousCircle.startHitCircle
                 
-                if (i == 0 or previousCircle.clicked or previousCircle.kill) and not (hitObject.clicked or hitObject.kill):
+                if (i == 0 or previousCircle.clicked or previousCircle.kill or time > previousCircle.time) and not (hitObject.clicked or hitObject.kill):
                     hitObject.hitCircle.mouseHit(MouseDataHandler.cursorPos,
                                                  self.displayV,
                                                  ignoreList=checkHitList)
