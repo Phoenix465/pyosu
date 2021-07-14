@@ -3,6 +3,8 @@ from typing import List, Tuple
 
 import bezier
 import numpy as np
+from pygame import Surface, SRCALPHA, transform
+from pygame.image import load
 from pygame.mixer import Sound
 from pygame.time import get_ticks
 
@@ -291,7 +293,7 @@ class Sliders:
 
         curvePoints = [initialPoint] + sliderPoints
 
-        totalStep = ceil(length/15)
+        totalStep = ceil(length/12)
         totalPathStep = ceil(length)
 
         if curveType.value == "P":
@@ -432,53 +434,119 @@ class Sliders:
         self.drawPoints = []
         self.kill = False
 
+        currentInitialPoint = initialPoint
+        tempRealPoints = [point + currentInitialPoint for point in self.curvePathIntricate]
+        xPoints = [point.X for point in tempRealPoints]
+        yPoints = [point.Y for point in tempRealPoints]
+        normalSize = vector.Vector2(max(xPoints)-min(xPoints),
+                                    max(yPoints)-min(yPoints)) + vector.Vector2(floor(2*circleRadiusOP),
+                                                                                floor(2*circleRadiusOP))
+
+        topLeftPoint = vector.Vector2(min(xPoints), min(yPoints))
+
+        mainSurface = Surface((normalSize*2).tuple, SRCALPHA)
+        boarderSurface = Surface((normalSize*2).tuple, SRCALPHA)
+
+        whiteCircleImage = load(r"C:\Users\HOME\PycharmProjects\osu!\resources\sliderboarder.png")
+        size = vector.Vector2(floor(circleRadiusOP*2), floor(circleRadiusOP*2)) * 2
+        realSize = vector.Vector2(circleRadiusOP*2, circleRadiusOP*2)
+
+        boarderImage = Surface(size.tuple, SRCALPHA)
+        boarderSize = vector.Vector2(floor(size.X*0.95), floor(size.Y*0.95))
+        boarderScale = transform.scale(whiteCircleImage, boarderSize.tuple)
+        boarderImage.blit(boarderScale, (size/2 - boarderSize/2).tuple)
+        # Seperate These 2 and into two different quads to apply different colours
+
+        insideImage = Surface(size.tuple, SRCALPHA)
+        imageSize = vector.Vector2(floor(size.X*0.85), floor(size.Y*0.85))
+        insideScale = transform.scale(whiteCircleImage, imageSize.tuple)
+        insideImage.blit(insideScale, (size/2 - imageSize/2).tuple)
+
+        for point in tempRealPoints:
+            imageRelPoint = point - topLeftPoint
+
+            mainSurface.blit(insideImage, (imageRelPoint*2).tuple)
+            boarderSurface.blit(boarderImage, (imageRelPoint * 2).tuple)
+
+        topLeftPointAdj = topLeftPoint + vector.Vector2(3, 3)
+        self.sliderMainQuad = quadHandler.QuadWithTransparency(
+            extra.generateRectangleCoordsTopLeft(
+                self.OPToScreen(topLeftPointAdj - realSize/2) / displayV,
+                self.OPSizeToScreen(normalSize) / displayV
+            ),
+            colour.Colour(0, 0, 0, convertToDecimal=True),
+            texture.loadTexture("", imageLoad=mainSurface),
+            displayV
+        )
+
+        self.sliderMainQuad.tweenTransparencyInfo = (0, 1)
+        self.sliderMainQuad.tweenTransparencyInfoChange = 1
+        self.sliderMainQuad.tweenTransparencyDirection = 1
+
+        self.sliderBoarderQuad = quadHandler.QuadWithTransparency(
+            extra.generateRectangleCoordsTopLeft(
+                self.OPToScreen(topLeftPointAdj - realSize/2) / displayV,
+                self.OPSizeToScreen(normalSize) / displayV
+            ),
+            colour.Colour(102, 100, 99, convertToDecimal=True),
+            texture.loadTexture("", imageLoad=boarderSurface),
+            displayV
+        )
+
+        self.sliderBoarderQuad.tweenTransparencyInfo = (0, 1)
+        self.sliderBoarderQuad.tweenTransparencyInfoChange = 1
+        self.sliderBoarderQuad.tweenTransparencyDirection = 1
+
         self.sliderBQuad = quadHandler.Quad(
             extra.generateCircleCorners(
                 self.OPToScreen(initialPoint) / displayV,
                 self.circleSize / displayV
             ),
-            colour.Colour(1, 1, 1),
+            colour.Colour(*comboColourTuple),
             sliderFollowTexture,
             displayV
         )
 
-        for point in self.curveDrawPoints:
-            newPoint = point + initialPoint
+        DRAW = False
 
-            newQuad = quadHandler.QuadWithTransparency(
-                extra.generateCircleCorners(
-                    self.OPToScreen(newPoint) / displayV,
-                    self.circleSize / displayV
-                ),
-                colour.Colour(102, 100, 99, convertToDecimal=True),
-                sliderBoarderTexture,
-                displayV
-            )
+        if DRAW:
+            for point in self.curveDrawPoints:
+                newPoint = point + initialPoint
 
-            newQuad.tweenTransparencyInfo = (0, 1)
-            newQuad.tweenTransparencyInfoChange = 1
-            newQuad.tweenTransparencyDirection = 1
+                newQuad = quadHandler.QuadWithTransparency(
+                    extra.generateCircleCorners(
+                        self.OPToScreen(newPoint) / displayV,
+                        self.circleSize*0.9 / displayV
+                    ),
+                    colour.Colour(102, 100, 99, convertToDecimal=True),
+                    sliderBoarderTexture,
+                    displayV
+                )
 
-            self.drawPoints.append(newQuad)
+                newQuad.tweenTransparencyInfo = (0, 1)
+                newQuad.tweenTransparencyInfoChange = 1
+                newQuad.tweenTransparencyDirection = 1
 
-        for point in self.curveDrawPoints:
-            newPoint = point + initialPoint
+                self.drawPoints.append(newQuad)
 
-            newQuad = quadHandler.QuadWithTransparency(
-                extra.generateCircleCorners(
-                    self.OPToScreen(newPoint)/displayV,
-                    self.circleSize*0.8 / displayV
-                ),
-                colour.Colour(50, 50, 50, convertToDecimal=True),
-                whiteImageTexture,
-                displayV
-            )
+            for point in self.curveDrawPoints:
+                newPoint = point + initialPoint
 
-            newQuad.tweenTransparencyInfo = (0, 1)
-            newQuad.tweenTransparencyInfoChange = 1
-            newQuad.tweenTransparencyDirection = 1
+                newQuad = quadHandler.QuadWithTransparency(
+                    extra.generateCircleCorners(
+                        self.OPToScreen(newPoint)/displayV,
+                        self.circleSize*0.8 / displayV
+                    ),
+                    colour.Colour(50, 50, 50, convertToDecimal=True),
+                    whiteImageTexture,
+                    displayV
+                )
 
-            self.drawPoints.append(newQuad)
+                newQuad.tweenTransparencyInfo = (0, 1)
+                newQuad.tweenTransparencyInfoChange = 1
+                newQuad.tweenTransparencyDirection = 1
+
+                self.drawPoints.append(newQuad)
 
         #print(curveDrawPoints)
 
@@ -509,10 +577,16 @@ class Sliders:
                 colour.Colour(1, 1, 1),
             )
 
-        if not self.startHitCircle.reached:
+        if not self.startHitCircle.reached and self.startHitCircle.hitCircle.tweenTransparencyStage != 0:
             for quad in self.drawPoints:
                 quad.tweenTransparencyStage = self.startHitCircle.hitCircle.tweenTransparencyStage
                 quad.updateTweenTransparency(0, fullBypass=True)
+
+            self.sliderMainQuad.tweenTransparencyStage = self.startHitCircle.hitCircle.tweenTransparencyStage
+            self.sliderMainQuad.updateTweenTransparency(0, fullBypass=True)
+
+            self.sliderBoarderQuad.tweenTransparencyStage = self.startHitCircle.hitCircle.tweenTransparencyStage
+            self.sliderBoarderQuad.updateTweenTransparency(0, fullBypass=True)
 
     def draw(self, time, keyboardHandler, beatLength, sliderMultiplier):
         if self.kill:
@@ -523,6 +597,8 @@ class Sliders:
             for point in self.drawPoints:
                 point.draw()
 
+            self.sliderBoarderQuad.draw()
+            self.sliderMainQuad.draw()
             self.sliderBQuad.draw()
 
         if self.startHitCircle.checkForCollision:
