@@ -342,6 +342,10 @@ class SceneHolder:
 
     class PlayMap:
         def __init__(self, GamePaths: gamePaths.PathHolder, displayV, mapData):
+            # TODO: Add Texture Cleanup Function
+
+            self.changeMode = None
+
             self.mapData = mapData
             self.displayV = displayV
             self.osupixel = Vector2(640, 480)
@@ -386,7 +390,9 @@ class SceneHolder:
             self.approachCircleTexture = texture.loadTexture(GamePaths.approachcirclePath)
             self.sliderFollowCircleTexture = texture.loadTexture(GamePaths.sliderBPath)
             self.whiteImageTexture = texture.loadTexture(GamePaths.whitecirclePath, useNearest=True)
+            self.sliderBoarderPath = GamePaths.sliderBoarderPath
             self.sliderBoarderTexture = texture.loadTexture(GamePaths.sliderBoarderPath, useNearest=True)
+            self.reverseArrowTexture = texture.loadTexture(GamePaths.reverseArrowPath)
 
             self.HitCircleObjects = []
             self.TimingPointObjects = self.beatmap.timing_objects
@@ -526,6 +532,7 @@ class SceneHolder:
                     hitObjectPV = hitObject.point
                     objectHitSoundType = hitObject.hitsound
 
+
                     newHitObject = MapObjects.Sliders(
                         Vector2(hitObjectPV.x, hitObjectPV.y),
                         [Vector2(point.x, point.y) for point in hitObject.curve_points] ,
@@ -534,20 +541,25 @@ class SceneHolder:
                         self.CircleSizeRadiusOP,
                         displayV,
                         hitObject.time,
+                        int(hitObject.slides),
                         self.ApproachRateTimings,
+                        self.sliderBoarderPath,
                         self.whiteImageTexture,
                         self.sliderFollowCircleTexture,
                         self.sliderBoarderTexture,
+                        self.reverseArrowTexture,
                         self.comboData[0],
                         (self.osupixelAdjust2, self.osupixelRatio2, self.osupixel, self.osupixelRatio),
 
+                        objectHitSoundType,
                         self.hitSounds[objectHitSoundType if objectHitSoundType < 4 else 0],
+                        self.hitSounds,
+                        hitObject.edge_sounds,
                         self.hitCircleTexture,
                         self.approachCircleTexture,
                         self.DefaultValues[currentCombo % 9 + 1],
                         self.HitWindowData,
                     )
-
                     self.HitCircleObjects.append(newHitObject)
 
 
@@ -627,7 +639,7 @@ class SceneHolder:
                 self.backgroundDimQuad.edit(colour.Colour(0, 0, 0, alpha=self.backgroundDimStage*self.backgroundDim))
 
             if self.backgroundDimStage >= 1:
-                #self.HealthBar.drain(self.objectDensity, delta)
+                self.HealthBar.drain(self.objectDensity, delta)
 
                 if not self.playedMusic and self.currentTime >= self.musicPlayTime:
                     self.playedMusic = True
@@ -690,28 +702,29 @@ class SceneHolder:
 
             for i, hitObject in enumerate(self.HitCircleObjects[::-1]):
                 if isinstance(hitObject, MapObjects.Sliders):
-                    continue
+                    hitObject = hitObject.startHitCircle if not hitObject.startHitCircle.kill else hitObject
                 
                 if hitObject.score != 0:
                     self.HealthBar.objectHitMiss(hitObject)
 
                     self.hitCount[hitObject.score] += 1
 
-                    self.accuracyValue = (
-                        self.hitCount["50"]  * 50  +
-                        self.hitCount["100"] * 100 +
-                        self.hitCount["300"] * 300
-                    ) / (300 * (
-                        self.hitCount["X"] +
-                        self.hitCount["50"] +
-                        self.hitCount["100"] +
-                        self.hitCount["300"]
-                    )) * 100
+                    if not isinstance(hitObject, MapObjects.Sliders):
+                        self.accuracyValue = (
+                            self.hitCount["50"]  * 50  +
+                            self.hitCount["100"] * 100 +
+                            self.hitCount["300"] * 300
+                        ) / (300 * (
+                            self.hitCount["X"] +
+                            self.hitCount["50"] +
+                            self.hitCount["100"] +
+                            self.hitCount["300"]
+                        )) * 100
 
-                    accuracyString = '{0:.2f}'.format(round(self.accuracyValue, 2))
-                    self.accuracyNumberShower.setNumber(
-                        "-"*(6-len(accuracyString)) + accuracyString + "%"
-                    )
+                        accuracyString = '{0:.2f}'.format(round(self.accuracyValue, 2))
+                        self.accuracyNumberShower.setNumber(
+                            "-"*(6-len(accuracyString)) + accuracyString + "%"
+                        )
 
                     if hitObject.score != "X":
                         comboMultiplier = max(self.scoreCombo - 1, 0)
@@ -785,6 +798,9 @@ class SceneHolder:
                     hitObject.scoreObject = None
 
         def draw(self, MouseDataHandler, keyboardHandler, tick):
+            if keyboardHandler.escapePressedOnce:
+                self.changeMode = "select"
+
             time = self.currentTime - self.musicPlayTime
             #print(self.currentTime - self.musicPlayTime)
             self.step(time, MouseDataHandler, tick)
@@ -858,6 +874,12 @@ class SceneHolder:
                                              self.displayV,
                                              self.select.mapData)
             self.fps = 120
+
+        if self.mode == "playmap" and self.playMapScene.changeMode:
+            self.mode = self.playMapScene.changeMode
+            self.playMapScene.changeMode = None
+
+            self.playMapScene = None
 
     def draw(self, MouseDataHandler, keyboardHandler, tick):
         if self.mode == "menu":

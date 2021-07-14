@@ -79,6 +79,8 @@ class PathHolder:
 
         self.scorebarBasePath = path.join(self.skinPath, "scorebar-colour.png")
 
+        self.reverseArrowPath = path.join(self.skinPath, "reversearrow.png")
+
         self.softHitClapSoundPath = path.join(self.skinPath, "soft-hitclap.ogg")
         self.softHitFinishSoundPath = path.join(self.skinPath, "soft-hitfinish.ogg")
         self.softHitNormalSoundPath = path.join(self.skinPath, "soft-hitnormal.ogg")

@@ -1,4 +1,4 @@
-from math import atan2, pi, floor, sin, cos, ceil
+from math import pi, floor, sin, cos, ceil, atan2
 from typing import List, Tuple
 
 import bezier
@@ -144,13 +144,14 @@ class HitCircle:
             self.hitOffset = hitTimeDifference
 
             self.score = hitTimeDifference <= self.hitWindowData["300"] and "300" or (
-                         hitTimeDifference <= self.hitWindowData["100"] and "100" or (
-                         hitTimeDifference <= self.hitWindowData["50"]  and "50"  or "X"))
+                    hitTimeDifference <= self.hitWindowData["100"] and "100" or (
+                    hitTimeDifference <= self.hitWindowData["50"] and "50" or "X"))
 
-            #print("SCORED", self.score)
+            # print("SCORED", self.score)
 
     def step(self, time):
-        if self.fadeInStart <= time <= self.fadeInEnd or (time > self.fadeInEnd and self.hitCircle.tweenTransparencyStage < 1 and not self.reached):
+        if self.fadeInStart <= time <= self.fadeInEnd or (
+                time > self.fadeInEnd and self.hitCircle.tweenTransparencyStage < 1 and not self.reached):
             timeChange = time - self.fadeInStart
             stage = min(timeChange / (self.fadeInEnd - self.fadeInStart), 1)
 
@@ -197,7 +198,7 @@ class HitCircle:
             self.kill = True
             self.score = "X"
 
-            #print("MISSED")
+            # print("MISSED")
 
     def draw(self, time, keyboardHandler):
         if self.kill:
@@ -216,7 +217,7 @@ class HitCircle:
                 self.comboCircle.draw()
                 self.approachCircle.draw()
 
-            #print(self.time, time, time > self.fadeInEnd, "A", self.approachCircle.tweenTransparencyStage)
+            # print(self.time, time, time > self.fadeInEnd, "A", self.approachCircle.tweenTransparencyStage)
 
         elif self.clicked:
             self.hitCircle.draw()
@@ -235,14 +236,20 @@ class Sliders:
                  circleRadiusOP: float,
                  displayV: vector.Vector2,
                  time: float,
+                 slideCount: int,
                  approachRateTimings: tuple,
+                 sliderBoarderPath: str,
                  whiteImageTexture,
                  sliderFollowTexture,
                  sliderBoarderTexture,
+                 reverseArrowTexture,
                  comboColourTuple: Tuple[int, int, int],
                  pixelExtraData: Tuple[vector.Vector2, vector.Vector2, vector.Vector2, vector.Vector2],
 
+                 objectHitSoundType,
                  hitSoundPath,
+                 allHitSounds,
+                 edgeSounds,
                  hitCircleTexture,
                  approachCircleTexture,
                  numberCircleTexture,
@@ -252,8 +259,14 @@ class Sliders:
         self.displayV = displayV
 
         self.length = length
+        self.slides = slideCount
+        self.slidesRegistered = 0
 
         self.startTime = time
+
+        self.allHitSounds = allHitSounds
+        self.edgeSounds = [int(sound) for sound in (edgeSounds or [objectHitSoundType]*slideCount).split("|")]
+        self.loadedEdgeSounds = {edgeSound: Sound(file=self.allHitSounds[edgeSound if edgeSound < 4 else 0]) for edgeSound in self.edgeSounds}
 
         self.drawSlider = False
 
@@ -275,7 +288,7 @@ class Sliders:
             numberCircleTexture,
             hitWindowData,
             displayV,
-            #sliderMode=True
+            # sliderMode=True
         )
 
         self.curveQuad = None
@@ -291,9 +304,12 @@ class Sliders:
 
         self.debugPoints = []
 
+        self.score = 0
+        self.scoreObject = None
+
         curvePoints = [initialPoint] + sliderPoints
 
-        totalStep = ceil(length/12)
+        totalStep = ceil(length / 12)
         totalPathStep = ceil(length)
 
         if curveType.value == "P":
@@ -301,16 +317,16 @@ class Sliders:
                 raise Exception("This shouldn't happen but Perfect Circle only has 3 points")
 
             centre, radius = extra.defineCircle(*curvePoints)
-            #print("Centre", centre, "Radius", radius)
+            # print("Centre", centre, "Radius", radius)
 
             # Radians
             startAngle = atan2(*(curvePoints[0] - centre).tuple)
             midAngle = atan2(*(curvePoints[1] - centre).tuple)
             endAngle = atan2(*(curvePoints[2] - centre).tuple)
 
-            if startAngle < 0: startAngle += 2*pi
-            if midAngle < 0: midAngle += 2*pi
-            if endAngle < 0: endAngle += 2*pi
+            if startAngle < 0: startAngle += 2 * pi
+            if midAngle < 0: midAngle += 2 * pi
+            if endAngle < 0: endAngle += 2 * pi
 
             if startAngle > endAngle: startAngle, endAngle = endAngle, startAngle
 
@@ -322,18 +338,18 @@ class Sliders:
             jump = (endAngle - startAngle) / totalStep
 
             for i in range(totalStep):
-                radAngle = (startAngle + i*jump) * pi / 180
+                radAngle = (startAngle + i * jump) * pi / 180
 
-                circleOffset = vector.Vector2(sin(radAngle)*radius, cos(radAngle)*radius)
+                circleOffset = vector.Vector2(sin(radAngle) * radius, cos(radAngle) * radius)
                 circleRealPos = centre + circleOffset
 
                 self.curveDrawPoints.append(circleRealPos - initialPoint)
 
             pathJump = (endAngle - startAngle) / totalPathStep
             for i in range(totalPathStep):
-                radAngle = (startAngle + i*pathJump) * pi / 180
+                radAngle = (startAngle + i * pathJump) * pi / 180
 
-                circleOffset = vector.Vector2(sin(radAngle)*radius, cos(radAngle)*radius)
+                circleOffset = vector.Vector2(sin(radAngle) * radius, cos(radAngle) * radius)
                 circleRealPos = centre + circleOffset
 
                 self.curvePathIntricate.append(circleRealPos - initialPoint)
@@ -345,7 +361,7 @@ class Sliders:
             for i, point in enumerate(curvePoints):
                 temp.append(point)
 
-                if i+1 != len(curvePoints) and point == curvePoints[i+1]:
+                if i + 1 != len(curvePoints) and point == curvePoints[i + 1]:
                     curvePointsSplit.append(temp)
                     temp = []
 
@@ -366,16 +382,16 @@ class Sliders:
 
                 curves.append(curve)
 
-            curveRatioStep = [len(split)/len(curvePoints) for split in curvePointsSplit]
-            curveStepPerCurve = [floor(ratio*totalStep) for ratio in curveRatioStep]
-            curveIntricateStepPerCurve = [floor(ratio*totalPathStep) for ratio in curveRatioStep]
+            curveRatioStep = [len(split) / len(curvePoints) for split in curvePointsSplit]
+            curveStepPerCurve = [floor(ratio * totalStep) for ratio in curveRatioStep]
+            curveIntricateStepPerCurve = [floor(ratio * totalPathStep) for ratio in curveRatioStep]
 
             curveSmallPoints = []
             curveIntricatePoints = []
 
             for i, curve in enumerate(curves):
                 maxStep = curveStepPerCurve[i]
-                curveTinyPoints = [curve.evaluate(s/maxStep) for s in range(maxStep+1)]
+                curveTinyPoints = [curve.evaluate(s / maxStep) for s in range(maxStep + 1)]
                 curveTinyPoints = map(lambda point: vector.Vector2(point[0][0], point[1][0]), curveTinyPoints)
                 curveSmallPoints.extend(curveTinyPoints)
 
@@ -388,7 +404,7 @@ class Sliders:
             self.curvePathIntricate = [point - initialPoint for point in curveIntricatePoints]
 
         elif curveType.value == "L":
-            magnitudes = [(curvePoints[i] - curvePoints[i+1]).magnitude for i in range(len(curvePoints)-1)]
+            magnitudes = [(curvePoints[i] - curvePoints[i + 1]).magnitude for i in range(len(curvePoints) - 1)]
 
             for i, mag in enumerate(magnitudes[:]):
                 if mag == 0:
@@ -396,26 +412,26 @@ class Sliders:
                     del curvePoints[i]
 
             totalMagnitude = sum(magnitudes)
-            ratioMagnitude = [mag/totalMagnitude for mag in magnitudes]
-            stepSplit = [ratio*totalStep for ratio in ratioMagnitude]
-            stepIntricateSplit = [ratio*totalPathStep for ratio in ratioMagnitude]
+            ratioMagnitude = [mag / totalMagnitude for mag in magnitudes]
+            stepSplit = [ratio * totalStep for ratio in ratioMagnitude]
+            stepIntricateSplit = [ratio * totalPathStep for ratio in ratioMagnitude]
 
             for i, point in enumerate(curvePoints[:-1]):
                 step = stepSplit[i]
                 stepIntricate = stepIntricateSplit[i]
 
-                pointB = curvePoints[i+1]
+                pointB = curvePoints[i + 1]
 
                 subVec = pointB - point
 
-                for stepI in range(ceil(step)+1):
-                    distDiv = stepI/step
+                for stepI in range(ceil(step) + 1):
+                    distDiv = stepI / step
                     newVec = point + (subVec * distDiv)
 
                     self.curveDrawPoints.append(newVec - initialPoint)
 
-                for stepIntricateI in range(ceil(stepIntricate)+1):
-                    distDiv = stepIntricateI/stepIntricate
+                for stepIntricateI in range(ceil(stepIntricate) + 1):
+                    distDiv = stepIntricateI / stepIntricate
                     newVec = point + (subVec * distDiv)
 
                     self.curvePathIntricate.append(newVec - initialPoint)
@@ -426,10 +442,11 @@ class Sliders:
         if len(self.curveDrawPoints) and self.curveDrawPoints[-1].magnitude < self.curveDrawPoints[0].magnitude:
             self.curveDrawPoints = self.curveDrawPoints[::-1]
 
-        if len(self.curvePathIntricate) and self.curvePathIntricate[-1].magnitude < self.curvePathIntricate[0].magnitude:
+        if len(self.curvePathIntricate) and self.curvePathIntricate[-1].magnitude < self.curvePathIntricate[
+            0].magnitude:
             self.curvePathIntricate = self.curvePathIntricate[::-1]
 
-        #print(time, len(self.curvePathIntricate), self.curvePathIntricate)
+        # print(time, len(self.curvePathIntricate), self.curvePathIntricate)
 
         self.drawPoints = []
         self.kill = False
@@ -438,40 +455,39 @@ class Sliders:
         tempRealPoints = [point + currentInitialPoint for point in self.curvePathIntricate]
         xPoints = [point.X for point in tempRealPoints]
         yPoints = [point.Y for point in tempRealPoints]
-        normalSize = vector.Vector2(max(xPoints)-min(xPoints),
-                                    max(yPoints)-min(yPoints)) + vector.Vector2(floor(2*circleRadiusOP),
-                                                                                floor(2*circleRadiusOP))
+        normalSize = vector.Vector2(max(xPoints) - min(xPoints),
+                                    max(yPoints) - min(yPoints)) + vector.Vector2(floor(2 * circleRadiusOP),
+                                                                                  floor(2 * circleRadiusOP))
 
         topLeftPoint = vector.Vector2(min(xPoints), min(yPoints))
 
-        mainSurface = Surface((normalSize*2).tuple, SRCALPHA)
-        boarderSurface = Surface((normalSize*2).tuple, SRCALPHA)
+        mainSurface = Surface((normalSize * 2).tuple, SRCALPHA)
+        boarderSurface = Surface((normalSize * 2).tuple, SRCALPHA)
 
-        whiteCircleImage = load(r"C:\Users\HOME\PycharmProjects\osu!\resources\sliderboarder.png")
-        size = vector.Vector2(floor(circleRadiusOP*2), floor(circleRadiusOP*2)) * 2
-        realSize = vector.Vector2(circleRadiusOP*2, circleRadiusOP*2)
+        whiteCircleImage = load(sliderBoarderPath)
+        size = vector.Vector2(floor(circleRadiusOP * 2), floor(circleRadiusOP * 2)) * 2
+        realSize = vector.Vector2(circleRadiusOP * 2, circleRadiusOP * 2)
 
         boarderImage = Surface(size.tuple, SRCALPHA)
-        boarderSize = vector.Vector2(floor(size.X*0.95), floor(size.Y*0.95))
+        boarderSize = vector.Vector2(floor(size.X * 0.95), floor(size.Y * 0.95))
         boarderScale = transform.scale(whiteCircleImage, boarderSize.tuple)
-        boarderImage.blit(boarderScale, (size/2 - boarderSize/2).tuple)
-        # Seperate These 2 and into two different quads to apply different colours
+        boarderImage.blit(boarderScale, (size / 2 - boarderSize / 2).tuple)
 
         insideImage = Surface(size.tuple, SRCALPHA)
-        imageSize = vector.Vector2(floor(size.X*0.85), floor(size.Y*0.85))
+        imageSize = vector.Vector2(floor(size.X * 0.85), floor(size.Y * 0.85))
         insideScale = transform.scale(whiteCircleImage, imageSize.tuple)
-        insideImage.blit(insideScale, (size/2 - imageSize/2).tuple)
+        insideImage.blit(insideScale, (size / 2 - imageSize / 2).tuple)
 
         for point in tempRealPoints:
             imageRelPoint = point - topLeftPoint
 
-            mainSurface.blit(insideImage, (imageRelPoint*2).tuple)
+            mainSurface.blit(insideImage, (imageRelPoint * 2).tuple)
             boarderSurface.blit(boarderImage, (imageRelPoint * 2).tuple)
 
         topLeftPointAdj = topLeftPoint + vector.Vector2(3, 3)
         self.sliderMainQuad = quadHandler.QuadWithTransparency(
             extra.generateRectangleCoordsTopLeft(
-                self.OPToScreen(topLeftPointAdj - realSize/2) / displayV,
+                self.OPToScreen(topLeftPointAdj - realSize / 2) / displayV,
                 self.OPSizeToScreen(normalSize) / displayV
             ),
             colour.Colour(0, 0, 0, convertToDecimal=True),
@@ -485,7 +501,7 @@ class Sliders:
 
         self.sliderBoarderQuad = quadHandler.QuadWithTransparency(
             extra.generateRectangleCoordsTopLeft(
-                self.OPToScreen(topLeftPointAdj - realSize/2) / displayV,
+                self.OPToScreen(topLeftPointAdj - realSize / 2) / displayV,
                 self.OPSizeToScreen(normalSize) / displayV
             ),
             colour.Colour(102, 100, 99, convertToDecimal=True),
@@ -497,6 +513,21 @@ class Sliders:
         self.sliderBoarderQuad.tweenTransparencyInfoChange = 1
         self.sliderBoarderQuad.tweenTransparencyDirection = 1
 
+        self.repeatSliderQuad = quadHandler.Quad(
+            extra.generateCircleCorners(
+                self.OPToScreen(initialPoint) / displayV,
+                self.circleSize / displayV
+            ),
+            colour.Colour(1, 1, 1),
+            reverseArrowTexture,
+            displayV
+        )
+        self.drawRepeat = False
+
+        #self.repeatSliderQuad.tweenTransparencyInfo = (0, 1)
+        #self.repeatSliderQuad.tweenTransparencyInfoChange = 1
+        #self.repeatSliderQuad.tweenTransparencyDirection = 1
+
         self.sliderBQuad = quadHandler.Quad(
             extra.generateCircleCorners(
                 self.OPToScreen(initialPoint) / displayV,
@@ -507,6 +538,9 @@ class Sliders:
             displayV
         )
 
+        self.sliderBIndexHistory = []
+
+
         DRAW = False
 
         if DRAW:
@@ -516,7 +550,7 @@ class Sliders:
                 newQuad = quadHandler.QuadWithTransparency(
                     extra.generateCircleCorners(
                         self.OPToScreen(newPoint) / displayV,
-                        self.circleSize*0.9 / displayV
+                        self.circleSize * 0.9 / displayV
                     ),
                     colour.Colour(102, 100, 99, convertToDecimal=True),
                     sliderBoarderTexture,
@@ -534,8 +568,8 @@ class Sliders:
 
                 newQuad = quadHandler.QuadWithTransparency(
                     extra.generateCircleCorners(
-                        self.OPToScreen(newPoint)/displayV,
-                        self.circleSize*0.8 / displayV
+                        self.OPToScreen(newPoint) / displayV,
+                        self.circleSize * 0.8 / displayV
                     ),
                     colour.Colour(50, 50, 50, convertToDecimal=True),
                     whiteImageTexture,
@@ -548,7 +582,7 @@ class Sliders:
 
                 self.drawPoints.append(newQuad)
 
-        #print(curveDrawPoints)
+        # print(curveDrawPoints)
 
     def OPToScreen(self, osupixel):
         return self.pixelExtraData[0] + osupixel * self.pixelExtraData[1]
@@ -558,15 +592,49 @@ class Sliders:
 
     def step(self, time, beatLength, sliderMultiplier):
         extraTime = self.length / (sliderMultiplier * 100) * beatLength
-        endTime = self.startTime + extraTime
+        endTime = self.startTime + extraTime * self.slides
+
         timeLeft = endTime - time
+        timeLeftSlide = timeLeft % extraTime
+
+        if time >= self.startTime:
+            tempSliderRegistered = (time - self.startTime) // extraTime
+
+            if tempSliderRegistered != self.slidesRegistered:
+                self.score = "300"
+                self.loadedEdgeSounds[self.edgeSounds[floor(self.slidesRegistered)]].play()
+
+            self.slidesRegistered = tempSliderRegistered
+
+            if self.slidesRegistered+1 < self.slides:
+                self.drawRepeat = True
+
+                posIndex = 0 if self.slidesRegistered % 2 else len(self.curvePathIntricate) - 1
+                pointA = self.curvePathIntricate[posIndex]
+                pointB = self.curvePathIntricate[posIndex + (1 if self.slidesRegistered % 2 else -1)]
+
+                angle = atan2(pointB.Y - pointA.Y, pointB.X - pointA.X) * 180 / pi
+
+                self.repeatSliderQuad.edit(
+                    [point/self.displayV for point in extra.generateCircleCornersRotation(
+                        self.OPToScreen(pointA + self.initialPoint),
+                        self.circleSize.X,
+                        angle
+                    )],
+                    colour.Colour(1, 1, 1)
+                )
+                self.repeatSliderPos = pointA + self.initialPoint
 
         if time > endTime:
             self.drawSlider = False
             self.kill = True
 
         if self.startTime < time <= endTime:
-            currentPositionIndex = floor((1-timeLeft/extraTime) * len(self.curvePathIntricate))
+            if self.slidesRegistered % 2:  # Even
+                currentPositionIndex = floor(timeLeftSlide / extraTime * len(self.curvePathIntricate))
+            else:
+                currentPositionIndex = floor((1 - timeLeftSlide / extraTime) * len(self.curvePathIntricate))
+
             currentPosition = self.curvePathIntricate[currentPositionIndex] + self.initialPoint
 
             self.sliderBQuad.edit(
@@ -599,6 +667,10 @@ class Sliders:
 
             self.sliderBoarderQuad.draw()
             self.sliderMainQuad.draw()
+
+            if self.drawRepeat:
+                self.repeatSliderQuad.draw()
+
             self.sliderBQuad.draw()
 
         if self.startHitCircle.checkForCollision:
@@ -615,10 +687,10 @@ class HealthBar:
         self.healthDrain = healthDrain
 
         self.loadedHealthImages = texture.loadAnimation(basePath)
-        self.origSize = vector.Vector2(423/1366, 118/768)
+        self.origSize = vector.Vector2(423 / 1366, 118 / 768)
 
         self.HealthBarQuad = quadHandler.QuadAnimation(
-            extra.generateRectangleCoordsTopLeft(vector.Vector2(5/1366, 16/768), self.origSize),
+            extra.generateRectangleCoordsTopLeft(vector.Vector2(5 / 1366, 16 / 768), self.origSize),
             colour.Colour(1, 1, 1),
             self.loadedHealthImages,
             displayV
@@ -642,8 +714,9 @@ class HealthBar:
         self.health = max(0, min(self.health, 100))
 
         self.HealthBarQuad.edit2(
-            extra.generateRectangleCoordsTopLeft(vector.Vector2(5/1366, 16/768), self.origSize * vector.Vector2(self.health/100, 1)),
-            [(0, 0), (self.health/100, 0), (self.health/100, 1), (0, 1)]
+            extra.generateRectangleCoordsTopLeft(vector.Vector2(5 / 1366, 16 / 768),
+                                                 self.origSize * vector.Vector2(self.health / 100, 1)),
+            [(0, 0), (self.health / 100, 0), (self.health / 100, 1), (0, 1)]
         )
 
         if self.health <= 20:
@@ -661,7 +734,6 @@ class HealthBar:
         healthChange = 0
 
         hitType = hitObject.score
-        hitTime = hitObject.time
 
         if hitType == "X":
             healthChange = -self.DEFAULT_MAX_HEALTH_DECREASE
@@ -673,7 +745,7 @@ class HealthBar:
             healthChange = self.DEFAULT_MAX_HEALTH_INCREASE
 
         self.setHealth(self.health + healthChange)
-        #self.healthDrain -= healthChange
+        # self.healthDrain -= healthChange
 
     def step(self):
         self.HealthBarQuad.stepAnimation()
@@ -683,4 +755,3 @@ class HealthBar:
 
         if self.health <= 20:
             self.dyingQuad.draw()
-

@@ -1,9 +1,9 @@
-from vector import Vector2
 import ctypes
-from math import sin as radSin
 from math import cos as radCos
 from math import pi
+from math import sin as radSin
 
+from vector import Vector2
 
 user32 = ctypes.windll.user32
 
@@ -72,6 +72,7 @@ def defineCircle(p1, p2, p3):
     det = (p1.X - p2.X) * (p2.Y - p3.Y) - (p2.X - p3.X) * (p1.Y - p2.Y)
 
     if abs(det) < 1.0e-6:
+        print(p1, p2, p3, det)
         raise Exception("Points Are Collinear")
 
     # Center of circle
@@ -88,6 +89,17 @@ def generateCircleCorners(circlePos: Vector2, cursorSize: float):
             circlePos + Vector2(1, -1) * (cursorSize / 2),  # Bottom Right
             circlePos + Vector2(-1, -1) * (cursorSize / 2)  # Bottom Left
             ]
+
+
+def generateCircleCornersRotation(circlePos: Vector2, cursorSize: float, rotation: float):
+    normalPoints = generateCircleCorners(Vector2(0, 0), cursorSize)
+
+    relPoints = [Vector2(
+        point.X*degCos(rotation) - point.Y*degSin(rotation),
+        point.X*degSin(rotation) + point.Y*degCos(rotation)
+    ) for point in normalPoints]
+
+    return [circlePos + point for point in relPoints]
 
 
 def generateRectangleCoords(anchorPoint: Vector2, size: Vector2):
